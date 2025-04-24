@@ -1,26 +1,11 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const line = require("./utils/line");
 const gemini = require("./utils/gemini");
-const axios = require("axios");
 const NodeCache = require("node-cache");
 
 const cache = new NodeCache();
 const CACHE_IMAGE = "image_";
 const CACHE_CHAT = "chat_";
-
-// Helper: Get coordinates using Google Maps Geocoding API
-const getCoordinates = async (place) => {
-  const apiKey = process.env.MAPS_API_KEY;
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=${apiKey}`;
-  const response = await axios.get(url);
-  const result = response.data.results[0];
-  if (!result) return null;
-  return {
-    lat: result.geometry.location.lat,
-    lng: result.geometry.location.lng,
-    address: result.formatted_address,
-  };
-};
 
 exports.webhook = onRequest(async (req, res) => {
   const events = req.body.events;
@@ -31,75 +16,78 @@ exports.webhook = onRequest(async (req, res) => {
     if (event.type === "message") {
       const msg = event.message;
 
-      // Handle text input
       if (msg.type === "text") {
         const prompt = msg.text;
-        const cacheImage = cache.get(CACHE_IMAGE + userId);
+        const cachedImage = cache.get(CACHE_IMAGE + userId);
 
-        // Google Maps functionality (trigger: map <location>)
+        // Map feature
         if (prompt.toLowerCase().startsWith("map ")) {
-          const locationName = prompt.slice(4); // remove "map " prefix
-          const coords = await getCoordinates(locationName);
+          const place = prompt.slice(4).trim();
+          const coords = await gemini.getMapLocation(place);
           if (coords) {
-            // Reply with location pin and Google Maps link
             await line.reply(event.replyToken, [
               {
                 type: "location",
-                title: locationName,
+                title: place,
                 address: coords.address,
                 latitude: coords.lat,
                 longitude: coords.lng,
               },
               {
                 type: "text",
-                text: `🗺️ View on Google Maps:\nhttps://www.google.com/maps?q=${coords.lat},${coords.lng}`,
+                text: `🗺️ Google Maps: https://www.google.com/maps?q=${coords.lat},${coords.lng}`,
               },
             ]);
           } else {
-            // No location found or invalid location
             await line.reply(event.replyToken, [
-              {
-                type: "text",
-                text: "❌ ไม่พบสถานที่ กรุณาระบุให้ชัดเจนขึ้น เช่น 'map Bangkok'",
-              },
+              { type: "text", text: "❌ ไม่พบสถานที่ กรุณาระบุให้ชัดเจนขึ้น เช่น 'map Bangkok'" },
             ]);
           }
           return;
         }
 
-        // Multimodal input (image + text)
-        if (cacheImage) {
-          const multimodalText = await gemini.multimodal(prompt, cacheImage);
-          await line.reply(event.replyToken, [
-            { type: "text", text: multimodalText },
-          ]);
+        // Image + text (multimodal)
+        if (cachedImage) {
+          try {
+            const multimodalText = await gemini.multimodal(prompt, cachedImage);
+            await line.reply(event.replyToken, [{ type: "text", text: multimodalText }]);
+            cache.del(CACHE_IMAGE + userId); // Clear after use
+          } catch (err) {
+            console.error("Multimodal error:", err);
+            await line.reply(event.replyToken, [
+              { type: "text", text: "❌ เกิดข้อผิดพลาดในการประมวลผลภาพ" },
+            ]);
+          }
           return;
         }
 
-        // Multi-turn conversation handling (chat)
-        let chatHistory = cache.get(CACHE_CHAT + userId) || [];
-        const chatResponse = await gemini.chat(chatHistory, prompt);
-        await line.reply(event.replyToken, [
-          { type: "text", text: chatResponse },
-        ]);
-
-        // Update chat history
+        // Text-only conversation
+        const chatHistory = cache.get(CACHE_CHAT + userId) || [];
+        const replyText = await gemini.chat(chatHistory, prompt);
         chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-        chatHistory.push({ role: "model", parts: [{ text: chatResponse }] });
-        cache.set(CACHE_CHAT + userId, chatHistory, 300);
+        chatHistory.push({ role: "model", parts: [{ text: replyText }] });
+        cache.set(CACHE_CHAT + userId, chatHistory, 300); // Save 5 mins
+        await line.reply(event.replyToken, [{ type: "text", text: replyText }]);
         return;
       }
 
-      // Handle image input
+      // Handle image
       if (msg.type === "image") {
-        const imageBinary = await line.getImageBinary(msg.id);
-        const imageBase64 = Buffer.from(imageBinary, "binary").toString("base64");
-        cache.set(CACHE_IMAGE + userId, imageBase64, 300);
-
-        await line.reply(event.replyToken, [
-          { type: "text", text: "📸 โปรดระบุสิ่งที่คุณต้องการให้ช่วยจากภาพนี้" },
-        ]);
-        return;
+        try {
+          const binary = await line.getImageBinary(msg.id);
+          if (!binary) {
+            await line.reply(event.replyToken, [{ type: "text", text: "❌ ไม่สามารถโหลดรูปภาพได้" }]);
+            return;
+          }
+          const base64 = Buffer.from(binary, "binary").toString("base64");
+          cache.set(CACHE_IMAGE + userId, base64, 300); // Save 5 mins
+          await line.reply(event.replyToken, [
+            { type: "text", text: "📸 โปรดระบุสิ่งที่คุณต้องการให้ช่วยจากภาพนี้" },
+          ]);
+        } catch (err) {
+          console.error("Image error:", err);
+          await line.reply(event.replyToken, [{ type: "text", text: "❌ ไม่สามารถประมวลผลรูปภาพได้" }]);
+        }
       }
     }
   }
