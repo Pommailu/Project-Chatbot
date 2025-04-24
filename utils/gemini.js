@@ -33,7 +33,7 @@ const multimodal = async (prompt, imageBase64) => {
   return result.response.text();
 };
 
-// 🔹 Google Maps
+// 🔹 Google Maps API - Get Lat/Lng from place name
 const getMapLocation = async (place) => {
   const apiKey = process.env.MAPS_API_KEY;
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=${apiKey}`;
@@ -48,9 +48,28 @@ const getMapLocation = async (place) => {
   };
 };
 
+// 🔹 Chat with Travel Expert Role
+const travelExpertChat = async (chatHistory, prompt) => {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+  const chatSession = model.startChat({
+    history: [
+      {
+        role: "user",
+        parts: [
+          "คุณคือผู้เชี่ยวชาญด้านการท่องเที่ยวทั่วโลก ช่วยแนะนำสถานที่ท่องเที่ยว อาหาร และกิจกรรมยอดนิยมตามความต้องการของผู้ใช้",
+        ],
+      },
+      ...chatHistory,
+    ],
+  });
+  const result = await chatSession.sendMessage(prompt);
+  return result.response.text();
+};
+
 module.exports = {
   textOnly,
   chat,
   multimodal,
   getMapLocation,
+  travelExpertChat,
 };
