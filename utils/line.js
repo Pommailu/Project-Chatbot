@@ -6,45 +6,42 @@ const LINE_HEADER = {
   Authorization: `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`,
 };
 
-// Standard reply with message(s)
-const reply = async (replyToken, messages) => {
-  await axios.post(
-    `${LINE_MESSAGING_API}/message/reply`,
-    {
-      replyToken: replyToken,
-      messages: messages,
-    },
-    { headers: LINE_HEADER }
-  );
-};
-
-// Reply with a location (Google Maps pin)
-const replyLocation = async (replyToken, title, address, lat, lng) => {
-  const locationMessage = {
-    type: "location",
-    title: title,
-    address: address,
-    latitude: lat,
-    longitude: lng,
-  };
-
-  await reply(replyToken, [locationMessage]);
-};
-
-// Fetch image binary from LINE content API
-const getImageBinary = async (messageId) => {
-  const response = await axios.get(
-    `${LINE_MESSAGING_API}/message/${messageId}/content`,
-    {
-      responseType: "arraybuffer",
+class LINE {
+  // Method to reply with a message
+  async reply(token, payload) {
+    await axios({
+      method: "post",
+      url: `https://api.line.me/v2/bot/message/reply`,
       headers: LINE_HEADER,
-    }
-  );
-  return response.data;
-};
+      data: {
+        replyToken: token,
+        messages: payload
+      },
+    });
+  }
 
-module.exports = {
-  reply,
-  replyLocation, // ✅ export location reply
-  getImageBinary,
-};
+  // Method to reply with a location
+  async replyLocation(replyToken, title, address, lat, lng) {
+    const locationMessage = {
+      type: "location",
+      title: title,
+      address: address,
+      latitude: lat,
+      longitude: lng,
+    };
+    await this.reply(replyToken, [locationMessage]);
+  }
+
+  // Method to get the binary content of an image
+  async getImageBinary(messageId) {
+    const originalImage = await axios({
+      method: "get",
+      headers: LINE_HEADER,
+      url: `https://api-data.line.me/v2/bot/message/${messageId}/content`,
+      responseType: "arraybuffer",
+    });
+    return originalImage.data;
+  }
+}
+
+module.exports = new LINE();
