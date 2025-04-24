@@ -2,6 +2,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const line = require("./utils/line");
 const gemini = require("./utils/gemini");
 const NodeCache = require("node-cache");
+const templates = require("./utils/flexTemplates");
 
 const cache = new NodeCache();
 const CACHE_IMAGE = "image_";
@@ -19,6 +20,22 @@ exports.webhook = onRequest(async (req, res) => {
       if (msg.type === "text") {
         const prompt = msg.text;
         const cachedImage = cache.get(CACHE_IMAGE + userId);
+
+        const categoryMap = {
+          "เที่ยวทะเล": templates.seaTripCarousel,
+          "เที่ยวภูเขา": templates.mountainTripCarousel,
+          "เที่ยวธรรมชาติ": templates.natureTripCarousel,
+          "เที่ยววัด": templates.templeTripCarousel,
+        };
+        
+        if (categoryMap[prompt]) {
+          await line.reply(event.replyToken, [{
+            type: "flex",
+            altText: `ที่${prompt}แนะนำ`,
+            contents: categoryMap[prompt]
+          }]);
+          return;
+        }
 
         // Map feature
         if (prompt.toLowerCase().startsWith("map ")) {
