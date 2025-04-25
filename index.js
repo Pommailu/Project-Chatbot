@@ -27,7 +27,7 @@ exports.webhook = onRequest(async (req, res) => {
           "เที่ยวธรรมชาติ": templates.natureTripCarousel,
           "เที่ยววัด": templates.templeTripCarousel,
         };
-        
+
         if (categoryMap[prompt]) {
           await line.reply(event.replyToken, [{
             type: "flex",
@@ -37,7 +37,7 @@ exports.webhook = onRequest(async (req, res) => {
           return;
         }
 
-        // Map feature
+        // 📍 Map feature
         if (prompt.toLowerCase().startsWith("map ")) {
           const place = prompt.slice(4).trim();
           const coords = await gemini.getMapLocation(place);
@@ -63,12 +63,12 @@ exports.webhook = onRequest(async (req, res) => {
           return;
         }
 
-        // Image + text (multimodal)
+        // 📸 Multimodal (image + text)
         if (cachedImage) {
           try {
             const multimodalText = await gemini.multimodal(prompt, cachedImage);
             await line.reply(event.replyToken, [{ type: "text", text: multimodalText }]);
-            cache.del(CACHE_IMAGE + userId); // Clear after use
+            cache.del(CACHE_IMAGE + userId);
           } catch (err) {
             console.error("Multimodal error:", err);
             await line.reply(event.replyToken, [
@@ -78,9 +78,17 @@ exports.webhook = onRequest(async (req, res) => {
           return;
         }
 
-        // Text-only conversation
+        // 💬 Text-only chat (General vs Travel Expert)
         const chatHistory = cache.get(CACHE_CHAT + userId) || [];
-        const replyText = await gemini.travelExpertChat(chatHistory, prompt);
+        const isTravelPrompt = /(เที่ยว|สถานที่ท่องเที่ยว|ทะเล|ภูเขา|ธรรมชาติ|วัด|จองโรงแรม|เดินทาง)/i.test(prompt);
+
+        let replyText;
+        if (isTravelPrompt) {
+          replyText = await gemini.travelExpertChat(chatHistory, prompt);
+        } else {
+          replyText = await gemini.chat(chatHistory, prompt);
+        }
+
         chatHistory.push({ role: "user", parts: [{ text: prompt }] });
         chatHistory.push({ role: "model", parts: [{ text: replyText }] });
         cache.set(CACHE_CHAT + userId, chatHistory, 300); // Save 5 mins
@@ -88,7 +96,7 @@ exports.webhook = onRequest(async (req, res) => {
         return;
       }
 
-      // Handle image
+      // 📷 Handle image
       if (msg.type === "image") {
         try {
           const binary = await line.getImageBinary(msg.id);
@@ -97,7 +105,7 @@ exports.webhook = onRequest(async (req, res) => {
             return;
           }
           const base64 = Buffer.from(binary, "binary").toString("base64");
-          cache.set(CACHE_IMAGE + userId, base64, 300); // Save 5 mins
+          cache.set(CACHE_IMAGE + userId, base64, 300);
           await line.reply(event.replyToken, [
             { type: "text", text: "📸 โปรดระบุสิ่งที่คุณต้องการให้ช่วยจากภาพนี้" },
           ]);
@@ -110,4 +118,4 @@ exports.webhook = onRequest(async (req, res) => {
   }
 
   res.end();
-})
+});
