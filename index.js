@@ -80,7 +80,7 @@ exports.webhook = onRequest(async (req, res) => {
 
         // Text-only conversation
         const chatHistory = cache.get(CACHE_CHAT + userId) || [];
-        const replyText = await gemini.chat(chatHistory, prompt);
+        const replyText = await gemini.travelExpertChat(chatHistory, prompt);
         chatHistory.push({ role: "user", parts: [{ text: prompt }] });
         chatHistory.push({ role: "model", parts: [{ text: replyText }] });
         cache.set(CACHE_CHAT + userId, chatHistory, 300); // Save 5 mins
@@ -110,4 +110,4 @@ exports.webhook = onRequest(async (req, res) => {
   }
 
   res.end();
-});
+})
