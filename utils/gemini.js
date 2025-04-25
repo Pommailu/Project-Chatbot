@@ -3,16 +3,25 @@ const axios = require("axios");
 
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
+// 🔧 Configuration for Gemini model
+const GEMINI_MODEL = "gemini-1.5-flash-8b";
+const geminiConfig = {
+  temperature: 0.9,
+  topP: 1,
+  topK: 1,
+  maxOutputTokens: 4096,
+};
+
 // 🔹 Text-only generation
 const textOnly = async (prompt) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
   const result = await model.generateContent(prompt);
   return result.response.text();
 };
 
-// 🔹 Chat with memory
+// 🔹 Chat with memory (General chat)
 const chat = async (chatHistory, prompt) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
   const chatSession = model.startChat({ history: chatHistory });
   const result = await chatSession.sendMessage(prompt);
   return result.response.text();
@@ -20,12 +29,12 @@ const chat = async (chatHistory, prompt) => {
 
 // 🔹 Multimodal (image + text)
 const multimodal = async (prompt, imageBase64) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
   const result = await model.generateContent([
     { text: prompt },
     {
       inlineData: {
-        mimeType: "image/jpeg", // or "image/png" if needed
+        mimeType: "image/jpeg", // หรือ "image/png"
         data: imageBase64,
       },
     },
@@ -48,14 +57,18 @@ const getMapLocation = async (place) => {
   };
 };
 
-// 🔹 Chat with Travel Expert Role
+// 🔹 Travel Expert Role Chat
 const travelExpertChat = async (chatHistory, prompt) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
   const chatSession = model.startChat({
     history: [
       {
         role: "user",
-        parts: [{ text: "คุณคือผู้เชี่ยวชาญด้านการท่องเที่ยวในประเทศไทย ช่วยแนะนำสถานที่ท่องเที่ยว อาหาร และกิจกรรมยอดนิยมตามความต้องการของผู้ใช้" }],
+        parts: [
+          {
+            text: "คุณคือผู้เชี่ยวชาญด้านการท่องเที่ยวในประเทศไทย ช่วยแนะนำสถานที่ท่องเที่ยว อาหาร และกิจกรรมยอดนิยมตามความต้องการของผู้ใช้",
+          },
+        ],
       },
       ...chatHistory,
     ],
